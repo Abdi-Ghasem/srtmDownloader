@@ -5,10 +5,11 @@
 import os
 import glob
 import shutil
+import rasterio
 import numpy as np
 import urllib.request
 import concurrent.futures
-from osgeo_utils import gdal_merge
+from rasterio.merge import merge
 
 # Define the base url for retrieving SRTM data
 url = 'https://srtm.csi.cgiar.org/wp-content/uploads/files/srtm_5x5/TIFF/'
@@ -108,9 +109,9 @@ def clip(aoi, save_path='srtm.tif'):
         executor.map(retrieve, ((xy, srtm_tmp) for xy in which_tiles(ul, lr)))
         
     # Merge the SRTM tiles into a single file followed by cropping over the AOI
-    gdal_merge.main(['', '-o', save_path] + glob.glob(srtm_tmp+'*.tif') + \
-        ['-ul_lr', str(ul[1]), str(ul[0]), str(lr[1]), str(lr[0])] + \
-            ['-n', '-32768'] + ['-a_nodata', '-32768'])
+    datasets = []
+    for filename in glob.glob(srtm_tmp+'*.tif'): datasets.append(rasterio.open(filename)) 
+    merge(datasets, bounds=(ul[1], lr[0], lr[1], ul[0]), nodata=-32768, dst_path=save_path)
     
     # Remove the tmp folder
     shutil.rmtree(srtm_tmp)
