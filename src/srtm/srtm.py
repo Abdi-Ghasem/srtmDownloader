@@ -3,6 +3,7 @@
 
 # Import dependencies
 import os
+import glob
 import shutil
 import numpy as np
 import urllib.request
@@ -49,38 +50,38 @@ def which_tiles(ul, lr):
     xy = np.stack((x.flatten(), y.flatten()), axis=1)
     return xy.tolist()
 
-def retrieve(xy):
+def retrieve(xyp):
     '''Retrieve SRTM data over a tile.
     Parameters
     ----------
-    xy : list
-        SRTM tile number.
+    xyp : list
+        SRTM tile number and save_path.
     Returns
     -------
     xy : string
         SRTM tile filename.
     '''
-    (x, y) = xy
+    ((x, y), path) = xyp
     
     try:
         # Retrieve SRTM tile and save it
         urllib.request.urlretrieve(url+f'srtm_{x:02d}_{y:02d}.zip', \
-            f'srtm_{x:02d}_{y:02d}.zip')
+            path+f'srtm_{x:02d}_{y:02d}.zip')
         
         # Unpack the downloaded zipfile into a folder
-        shutil.unpack_archive(f'srtm_{x:02d}_{y:02d}.zip', f'srtm_{x:02d}_{y:02d}')
+        shutil.unpack_archive(path+f'srtm_{x:02d}_{y:02d}.zip', \
+            path+f'srtm_{x:02d}_{y:02d}')
         
         # Remove the downloaded zipfile
-        os.remove(f'srtm_{x:02d}_{y:02d}.zip')
+        os.remove(path+f'srtm_{x:02d}_{y:02d}.zip')
         
         # Move the tile tif to the base root
-        shutil.move(f'srtm_{x:02d}_{y:02d}/'+f'srtm_{x:02d}_{y:02d}.tif', \
-            f'srtm_{x:02d}_{y:02d}.tif')
+        shutil.move(path+f'srtm_{x:02d}_{y:02d}/'+f'srtm_{x:02d}_{y:02d}.tif', \
+            path+f'srtm_{x:02d}_{y:02d}.tif')
         
         # Remove the unpacked folder
-        shutil.rmtree(f'srtm_{x:02d}_{y:02d}')
-        return f'srtm_{x:02d}_{y:02d}.tif'
-    
+        shutil.rmtree(path+f'srtm_{x:02d}_{y:02d}')
+        
     except:
         pass
     
@@ -96,18 +97,20 @@ def clip(aoi, save_path='srtm.tif'):
     -------
     None
     '''
-    tilenames = []
-    ul, lr = aoi['upper_left'], aoi['lower_right']
+    # Create a tmp folder for srtm processing
+    save_path = os.path.abspath(save_path)
+    srtm_tmp = os.path.dirname(save_path)+'/srtm_tmp/'
+    os.makedirs(srtm_tmp, exist_ok=True)
     
+    ul, lr = aoi['upper_left'], aoi['lower_right']
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Retrieve SRTM tiles of an AOI (multi-threaded)
-        names = executor.map(retrieve, which_tiles(ul, lr))
-        for name in names: tilenames.append(name)
+        executor.map(retrieve, ((xy, srtm_tmp) for xy in which_tiles(ul, lr)))
         
-        # Merge the SRTM tiles into a single file followed by cropping over the AOI
-        gdal_merge.main(['', '-o', save_path] + tilenames + \
-            ['-ul_lr', str(ul[1]), str(ul[0]), str(lr[1]), str(lr[0])] + \
-                ['-n', '-32768'] + ['-a_nodata', '-32768'])
-        
-        # Remove the SRTM tiles (multi-threaded)
-        executor.map(os.remove, tilenames)
+    # Merge the SRTM tiles into a single file followed by cropping over the AOI
+    gdal_merge.main(['', '-o', save_path] + glob.glob(srtm_tmp+'*.tif') + \
+        ['-ul_lr', str(ul[1]), str(ul[0]), str(lr[1]), str(lr[0])] + \
+            ['-n', '-32768'] + ['-a_nodata', '-32768'])
+    
+    # Remove the tmp folder
+    shutil.rmtree(srtm_tmp)
