@@ -56,3 +56,15 @@ ellipsoidal_height = trf.transform(lat, lon, orthometric_height)[-1]
 ```
 
 </div>
+
+**How to cite?**
+```
+@misc{Abdi-Ghasem/srtmDownloader,
+  title={srtmDownloader},
+  author={Abdi, Ghasem},
+  publisher={GitHub},
+  journal={GitHub repository},
+  howpublished={\url{https://github.com/Abdi-Ghasem/srtmDownloader}},
+  year={2022}
+}
+```
